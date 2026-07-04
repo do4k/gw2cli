@@ -30,8 +30,8 @@ public class GW2ApiService(IGW2ApiClient client)
     public Task<List<string>> GetAccountRaidClearancesAsync() => client.GetAccountRaidClearancesAsync();
     public Task<List<string>> GetAccountDungeonClearancesAsync() => client.GetAccountDungeonClearancesAsync();
     public Task<List<LegendaryArmoryEntry>> GetLegendaryArmoryAsync() => client.GetLegendaryArmoryAsync();
-    public Task<List<WizardsVaultObjective>> GetWizardsVaultDailyAsync() => client.GetWizardsVaultDailyAsync();
-    public Task<List<WizardsVaultObjective>> GetWizardsVaultWeeklyAsync() => client.GetWizardsVaultWeeklyAsync();
+    public Task<WizardsVaultResponse> GetWizardsVaultDailyAsync() => client.GetWizardsVaultDailyAsync();
+    public Task<WizardsVaultResponse> GetWizardsVaultWeeklyAsync() => client.GetWizardsVaultWeeklyAsync();
 
     // ── Characters ─────────────────────────────────────────────────────────────
     public Task<List<string>> GetCharacterNamesAsync() => client.GetCharacterNamesAsync();

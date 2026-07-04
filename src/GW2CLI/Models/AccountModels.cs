@@ -38,7 +38,7 @@ public class BankSlot
     public int Count { get; set; }
     public int? Charges { get; set; }
     public int? Skin { get; set; }
-    public List<int>? Dyes { get; set; }
+    public List<int?>? Dyes { get; set; }
     public List<int>? Upgrades { get; set; }
     public List<int>? Infusions { get; set; }
     public string? Binding { get; set; }
@@ -106,11 +106,13 @@ public class LegendaryArmoryEntry
 }
 
 // Wizard's Vault
-public class WizardsVaultSeason
+public class WizardsVaultResponse
 {
-    public string Title { get; set; } = "";
-    public DateTimeOffset Start { get; set; }
-    public DateTimeOffset End { get; set; }
+    public int MetaProgressCurrent { get; set; }
+    public int MetaProgressComplete { get; set; }
+    public int MetaRewardItemId { get; set; }
+    public int MetaRewardAstral { get; set; }
+    public bool MetaRewardClaimed { get; set; }
     public List<WizardsVaultObjective> Objectives { get; set; } = [];
 }
 
@@ -119,19 +121,10 @@ public class WizardsVaultObjective
     public int Id { get; set; }
     public string Title { get; set; } = "";
     public string Track { get; set; } = "";
-    public string Acclaim { get; set; } = "";
-    public int AstralAcclaim { get; set; }
+    public int Acclaim { get; set; }
+    public int ProgressCurrent { get; set; }
+    public int ProgressComplete { get; set; }
     public bool Claimed { get; set; }
-    public int? Current { get; set; }
-    public int? Max { get; set; }
-    public List<WizardsVaultReward> Objectives { get; set; } = [];
-}
-
-public class WizardsVaultReward
-{
-    public int Id { get; set; }
-    public int Type { get; set; }
-    public int Count { get; set; }
 }
 
 // WvW

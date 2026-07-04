@@ -32,7 +32,7 @@ public class EquipmentItem
     public int Id { get; set; }
     public string Slot { get; set; } = "";
     public int? Skin { get; set; }
-    public List<int>? Dyes { get; set; }
+    public List<int?>? Dyes { get; set; }
     public List<int>? Upgrades { get; set; }
     public List<int>? Infusions { get; set; }
     public string? Binding { get; set; }

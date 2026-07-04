@@ -62,7 +62,8 @@ public static class CharacterCommands
             Row("Level", c.Level.ToString());
             Row("Playtime", Helpers.FormatPlaytime(c.Age));
             Row("Deaths", c.Deaths.ToString("N0"));
-            Row("Experience", c.Experience.ToString("N0"));
+            if (c.Experience > 0)
+                Row("Experience", c.Experience.ToString("N0"));
             Row("Created", c.Created.ToString("yyyy-MM-dd"));
 
             if (c.Crafting.Count > 0)

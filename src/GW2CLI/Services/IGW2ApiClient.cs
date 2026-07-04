@@ -41,10 +41,10 @@ public interface IGW2ApiClient
     Task<List<LegendaryArmoryEntry>> GetLegendaryArmoryAsync();
 
     [Get("/account/wizardsvault/daily")]
-    Task<List<WizardsVaultObjective>> GetWizardsVaultDailyAsync();
+    Task<WizardsVaultResponse> GetWizardsVaultDailyAsync();
 
     [Get("/account/wizardsvault/weekly")]
-    Task<List<WizardsVaultObjective>> GetWizardsVaultWeeklyAsync();
+    Task<WizardsVaultResponse> GetWizardsVaultWeeklyAsync();
 
     // ── Characters ─────────────────────────────────────────────────────────────
     [Get("/characters")]

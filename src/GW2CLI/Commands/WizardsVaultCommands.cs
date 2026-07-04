@@ -24,9 +24,9 @@ public static class WizardsVaultCommands
             Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             await Helpers.RunAsync(async () =>
             {
-                var objectives = await AnsiConsole.Status().Spinner(Spinner.Known.Dots)
+                var response = await AnsiConsole.Status().Spinner(Spinner.Known.Dots)
                     .StartAsync("Fetching daily vault...", _ => api.GetWizardsVaultDailyAsync());
-                PrintObjectives("Daily Wizard's Vault", objectives);
+                PrintVault("Daily Wizard's Vault", response);
             });
         });
         return cmd;
@@ -40,36 +40,50 @@ public static class WizardsVaultCommands
             Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             await Helpers.RunAsync(async () =>
             {
-                var objectives = await AnsiConsole.Status().Spinner(Spinner.Known.Dots)
+                var response = await AnsiConsole.Status().Spinner(Spinner.Known.Dots)
                     .StartAsync("Fetching weekly vault...", _ => api.GetWizardsVaultWeeklyAsync());
-                PrintObjectives("Weekly Wizard's Vault", objectives);
+                PrintVault("Weekly Wizard's Vault", response);
             });
         });
         return cmd;
     }
 
-    private static void PrintObjectives(string title, List<WizardsVaultObjective> objectives)
+    private static void PrintVault(string title, WizardsVaultResponse r)
     {
         AnsiConsole.MarkupLine($"[bold yellow]{title}[/]");
-        var claimedAcclaim = objectives.Where(o => o.Claimed).Sum(o => o.AstralAcclaim);
-        var totalAcclaim = objectives.Sum(o => o.AstralAcclaim);
-        AnsiConsole.MarkupLine($"[grey]Astral Acclaim: [bold]{claimedAcclaim}[/] / {totalAcclaim}[/]");
+
+        var metaBar = ProgressBar((double)r.MetaProgressCurrent / Math.Max(1, r.MetaProgressComplete), 20);
+        AnsiConsole.MarkupLine($"[grey]Meta:[/] {metaBar} {r.MetaProgressCurrent}/{r.MetaProgressComplete}  " +
+            $"[grey]Reward:[/] [mediumpurple1]{r.MetaRewardAstral} Astral Acclaim[/]{(r.MetaRewardClaimed ? " [green](claimed)[/]" : "")}");
+
+        var claimedAcclaim = r.Objectives.Where(o => o.Claimed).Sum(o => o.Acclaim);
+        var totalAcclaim = r.Objectives.Sum(o => o.Acclaim);
+        AnsiConsole.MarkupLine($"[grey]Acclaim earned:[/] [bold]{claimedAcclaim}[/] / {totalAcclaim}");
         AnsiConsole.WriteLine();
 
         var table = Helpers.NewTable("", "Objective", "Track", "Progress", "Acclaim");
         table.Columns[0].Width(3);
-        foreach (var obj in objectives)
+        foreach (var obj in r.Objectives)
         {
             var status = obj.Claimed ? "[green]✓[/]" : "[yellow]○[/]";
-            var progress = obj.Current.HasValue && obj.Max.HasValue && !obj.Claimed
-                ? $"{obj.Current}/{obj.Max}" : "";
+            var progress = !obj.Claimed && obj.ProgressComplete > 1
+                ? $"{obj.ProgressCurrent}/{obj.ProgressComplete}"
+                : obj.Claimed ? "[green]Done[/]" : "";
             var trackColor = obj.Track switch
             {
                 "PvE" => "green3", "PvP" => "red", "WvW" => "yellow3", "Fractals" => "cyan1", _ => "grey"
             };
             table.AddRow(status, Markup.Escape(obj.Title),
-                $"[{trackColor}]{Markup.Escape(obj.Track)}[/]", progress, obj.AstralAcclaim.ToString());
+                $"[{trackColor}]{Markup.Escape(obj.Track)}[/]", progress, obj.Acclaim.ToString());
         }
         AnsiConsole.Write(table);
+    }
+
+    private static string ProgressBar(double pct, int width)
+    {
+        var filled = (int)(pct * width);
+        var bar = new string('█', filled) + new string('░', width - filled);
+        var color = pct >= 1.0 ? "green3" : pct >= 0.5 ? "yellow3" : "grey50";
+        return $"[{color}]{bar}[/]";
     }
 }
