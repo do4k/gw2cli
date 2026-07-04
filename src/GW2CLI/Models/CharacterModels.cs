@@ -60,7 +60,7 @@ public class SkillSet
     public int? Heal { get; set; }
     public List<int?> Utilities { get; set; } = [];
     public int? Elite { get; set; }
-    public List<int?>? Legends { get; set; }
+    public List<string>? Legends { get; set; }
 }
 
 public class CharacterSpecializations

@@ -18,6 +18,7 @@ public static class CharacterCommands
         characters.AddCommand(BuildSkills(api, keyContext, apiKeyOption));
         characters.AddCommand(BuildCrafting(api, keyContext, apiKeyOption));
         characters.AddCommand(BuildInventory(api, keyContext, apiKeyOption));
+        characters.AddCommand(BuildNetWorth(api, keyContext, apiKeyOption));
 
         characters.SetHandler(async (InvocationContext ctx) =>
         {
@@ -31,8 +32,19 @@ public static class CharacterCommands
                     var names = await AnsiConsole.Status()
                         .Spinner(Spinner.Known.Dots)
                         .StartAsync("Fetching characters...", _ => api.GetCharacterNamesAsync());
-                    var table = Helpers.NewTable("Character");
-                    foreach (var n in names) table.AddRow(Markup.Escape(n));
+
+                    var characters = await AnsiConsole.Status()
+                        .Spinner(Spinner.Known.Dots)
+                        .StartAsync("Fetching character details...", _ =>
+                            Task.WhenAll(names.Select(n => api.GetCharacterAsync(n))));
+
+                    var table = Helpers.NewTable("Character", "Profession", "Race", "Level");
+                    foreach (var c in characters.OrderBy(c => c.Name))
+                        table.AddRow(
+                            Markup.Escape(c.Name),
+                            Helpers.ProfessionMarkup(c.Profession),
+                            c.Race,
+                            c.Level.ToString());
                     AnsiConsole.Write(table);
                 });
             }
@@ -278,6 +290,79 @@ public static class CharacterCommands
                     }
                 }
                 AnsiConsole.Write(table);
+            });
+        });
+        return cmd;
+    }
+
+    private static Command BuildNetWorth(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
+    {
+        var nameArg = new Argument<string>("name", "Character name");
+        var cmd = new Command("networth", "Estimate character net worth from equipment and bags (TP sell prices)");
+        cmd.AddArgument(nameArg);
+
+        cmd.SetHandler(async (InvocationContext ctx) =>
+        {
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
+            var name = ctx.ParseResult.GetValueForArgument(nameArg);
+
+            await Helpers.RunAsync(async () =>
+            {
+                Character character = null!;
+                Dictionary<int, CommercePrices> priceMap = [];
+                await AnsiConsole.Status()
+                    .Spinner(Spinner.Known.Dots)
+                    .StartAsync("Fetching character and prices...", async _ =>
+                    {
+                        var c = await api.GetCharacterAsync(name);
+                        character = c;
+
+                        var equipIds = (c.Equipment ?? []).Select(e => e.Id);
+                        var bagItemIds = (c.Bags ?? [])
+                            .SelectMany(b => b.Inventory)
+                            .Where(s => s != null)
+                            .Select(s => s!.Id);
+                        var allIds = equipIds.Concat(bagItemIds).Distinct().ToList();
+
+                        var pricesTask = api.GetItemPricesBatchAsync(allIds);
+                        var prices = await pricesTask;
+                        priceMap = prices.ToDictionary(p => p.Id);
+                    });
+
+                // Equipment
+                long equipValue = 0;
+                foreach (var e in (character.Equipment ?? []).Where(e => e.Location is null or "Equipped"))
+                    if (priceMap.TryGetValue(e.Id, out var p)) equipValue += p.Sells.UnitPrice;
+
+                // Bags contents
+                long bagValue = 0;
+                var bagItems = (character.Bags ?? [])
+                    .SelectMany(b => b.Inventory)
+                    .Where(s => s != null)
+                    .GroupBy(s => s!.Id)
+                    .Select(g => (Id: g.Key, Count: g.Sum(s => s!.Count)))
+                    .ToList();
+
+                foreach (var entry in bagItems)
+                    if (priceMap.TryGetValue(entry.Id, out var p)) bagValue += (long)p.Sells.UnitPrice * entry.Count;
+
+                long total = equipValue + bagValue;
+
+                var grid = new Grid().AddColumn().AddColumn();
+                void Row(string label, string value) => grid.AddRow($"[grey]{label}[/]", value);
+                Row("Equipment", Helpers.FormatCoins(equipValue));
+                Row("Bag contents", Helpers.FormatCoins(bagValue));
+                Row("Total (pre-tax)", Helpers.FormatCoins(total));
+                Row("Total (post 15% tax)", Helpers.FormatCoins((long)(total * 0.85)));
+
+                var panel = new Panel(grid)
+                {
+                    Header = new PanelHeader($"[bold]{Markup.Escape(name)}[/] — Net Worth"),
+                    Border = BoxBorder.Rounded,
+                    BorderStyle = new Style(Color.Yellow)
+                };
+                AnsiConsole.Write(panel);
+                AnsiConsole.MarkupLine("[grey]Based on lowest sell listings. Items with no TP listing excluded.[/]");
             });
         });
         return cmd;
