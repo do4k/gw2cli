@@ -180,10 +180,12 @@ npm install -g @anthropic-ai/claude-code
 ### Add the gw2cli skill
 
 ```bash
-git clone https://github.com/do4k/gw2cli ~/.claude/skills/gw2cli
+npx skills add do4k/gw2cli
 ```
 
-Claude Code auto-discovers skills from `~/.claude/skills/`. Once cloned, start a session and ask:
+Or manually: `git clone https://github.com/do4k/gw2cli ~/.claude/skills/gw2cli`
+
+Once installed, start a Claude Code session and ask:
 
 - "What characters do I have and what level are they?"
 - "How do I craft Twilight?"

@@ -6,6 +6,12 @@ Use the `gw2` CLI to answer questions about a Guild Wars 2 account. All commands
 
 ## Installation
 
+### Install this skill into Claude Code
+
+```bash
+npx skills add do4k/gw2cli
+```
+
 ### Quick install (Linux / macOS)
 
 ```bash
