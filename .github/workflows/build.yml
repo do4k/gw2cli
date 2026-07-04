@@ -47,7 +47,7 @@ jobs:
       - name: Restore
         run: dotnet restore src/GW2CLI/GW2CLI.csproj
 
-      - name: Publish
+      - name: Publish (self-contained)
         run: |
           dotnet publish src/GW2CLI/GW2CLI.csproj \
             --configuration Release \
@@ -57,19 +57,39 @@ jobs:
             -p:PublishTrimmed=false \
             -p:DebugType=None \
             -p:DebugSymbols=false \
-            --output publish/${{ matrix.rid }}
+            --output publish/sc/${{ matrix.rid }}
         shell: bash
 
-      - name: Rename artifact
+      - name: Publish (framework-dependent)
         run: |
-          mv publish/${{ matrix.rid }}/${{ matrix.artifact }} publish/${{ matrix.rid }}/gw2-${{ matrix.rid }}${{ runner.os == 'Windows' && '.exe' || '' }}
+          dotnet publish src/GW2CLI/GW2CLI.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.rid }} \
+            --self-contained false \
+            -p:PublishSingleFile=true \
+            -p:DebugType=None \
+            -p:DebugSymbols=false \
+            --output publish/fd/${{ matrix.rid }}
         shell: bash
 
-      - name: Upload artifact
+      - name: Rename artifacts
+        run: |
+          EXT="${{ runner.os == 'Windows' && '.exe' || '' }}"
+          mv publish/sc/${{ matrix.rid }}/${{ matrix.artifact }} publish/sc/${{ matrix.rid }}/gw2-${{ matrix.rid }}${EXT}
+          mv publish/fd/${{ matrix.rid }}/${{ matrix.artifact }} publish/fd/${{ matrix.rid }}/gw2-${{ matrix.rid }}-fd${EXT}
+        shell: bash
+
+      - name: Upload self-contained artifact
         uses: actions/upload-artifact@v4
         with:
           name: gw2-${{ matrix.rid }}
-          path: publish/${{ matrix.rid }}/gw2-${{ matrix.rid }}*
+          path: publish/sc/${{ matrix.rid }}/gw2-${{ matrix.rid }}*
+
+      - name: Upload framework-dependent artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gw2-${{ matrix.rid }}-fd
+          path: publish/fd/${{ matrix.rid }}/gw2-${{ matrix.rid }}-fd*
 
   release:
     name: Create Release

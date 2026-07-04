@@ -2,6 +2,48 @@
 
 Use the `gw2` CLI to answer questions about a Guild Wars 2 account. All commands assume the API key is stored (`gw2 auth set <key>`). Commands that need auth are marked 🔑.
 
+---
+
+## Installation
+
+### Quick install (Linux / macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/do4k/gw2cli/main/install.sh | bash
+```
+
+This script:
+1. Detects your OS and architecture (linux/osx × x64/arm64)
+2. Installs the .NET 11 runtime to `~/.dotnet` if not already present
+3. Downloads the framework-dependent `gw2` binary from the latest GitHub release
+4. Installs to `~/.local/bin/gw2`
+
+Override install directory: `GW2CLI_INSTALL_DIR=/usr/local/bin bash install.sh`
+
+### Manual download
+
+Grab a binary from [GitHub Releases](https://github.com/do4k/gw2cli/releases):
+
+| Binary | Description |
+|---|---|
+| `gw2-{rid}` | Self-contained — no .NET required, larger file (~60 MB) |
+| `gw2-{rid}-fd` | Framework-dependent — requires .NET 11 runtime, smaller file (~1 MB) |
+
+Where `{rid}` is one of: `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `win-x64`, `win-arm64`
+
+### Install .NET 11 runtime manually
+
+```bash
+curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- \
+  --channel 11.0 --quality preview --runtime dotnet
+```
+
+### Windows
+
+Download `gw2-win-x64.exe` (self-contained) or `gw2-win-x64-fd.exe` (framework-dependent) from [GitHub Releases](https://github.com/do4k/gw2cli/releases) and place it on your PATH.
+
+---
+
 ## Authentication
 
 ```bash
