@@ -1,3 +1,8 @@
+---
+name: gw2cli
+description: Query a Guild Wars 2 account via the gw2 CLI — characters, achievements, crafting recipes, trading post prices, WvW, PvP, masteries, and Wizard's Vault.
+---
+
 # GW2 CLI — Agent Skill Reference
 
 Use the `gw2` CLI to answer questions about a Guild Wars 2 account. All commands assume the API key is stored (`gw2 auth set <key>`). Commands that need auth are marked 🔑.
