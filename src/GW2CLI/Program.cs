@@ -12,6 +12,7 @@ var services = new ServiceCollection();
 services.AddSingleton<ConfigService>();
 services.AddSingleton<ApiKeyContext>();
 services.AddTransient<ApiKeyHandler>();
+services.AddTransient<CachingHandler>();
 
 var jsonOptions = new JsonSerializerOptions
 {
@@ -31,6 +32,7 @@ services
         c.Timeout = TimeSpan.FromSeconds(30);
         c.DefaultRequestHeaders.Add("User-Agent", "gw2cli/1.0");
     })
+    .AddHttpMessageHandler<CachingHandler>()
     .AddHttpMessageHandler<ApiKeyHandler>();
 
 services.AddTransient<GW2ApiService>();
