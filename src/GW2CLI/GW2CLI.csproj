@@ -9,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Optimize>true</Optimize>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
-    <Version>0.0.0.2</Version>
+    <Version>0.0.0-dev</Version>
     <Description>Guild Wars 2 command-line interface</Description>
   </PropertyGroup>
 
