@@ -25,34 +25,47 @@ gw2 commerce price 19721
 
 ### Pre-built binaries
 
-Download from [Releases](https://github.com/do4k/gw2cli/releases) — self-contained, no .NET runtime required.
-
-| Platform | File |
-|---|---|
-| macOS (Apple Silicon) | `gw2-osx-arm64` |
-| macOS (Intel) | `gw2-osx-x64` |
-| Linux x64 | `gw2-linux-x64` |
-| Linux ARM64 | `gw2-linux-arm64` |
-| Windows x64 | `gw2-win-x64.exe` |
-| Windows ARM64 | `gw2-win-arm64.exe` |
+### Quick install (Linux / macOS)
 
 ```bash
-# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/do4k/gw2cli/main/install.sh | bash
+```
+
+Detects your platform, installs the .NET 11 runtime if needed, and downloads the framework-dependent binary to `~/.local/bin/gw2`.
+
+### Manual download
+
+Download from [Releases](https://github.com/do4k/gw2cli/releases).
+
+Two variants per platform:
+
+| Variant | Suffix | Size | Requirement |
+|---|---|---|---|
+| Self-contained | `gw2-{rid}` | ~60 MB | None |
+| Framework-dependent | `gw2-{rid}-fd` | ~1 MB | .NET 11 runtime |
+
+Platforms: `osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64`, `win-x64`, `win-arm64`
+
+```bash
+# macOS / Linux — self-contained example
 chmod +x gw2-osx-arm64
 sudo mv gw2-osx-arm64 /usr/local/bin/gw2
 ```
 
 ### Build from source
 
-Requires [.NET 9 SDK](https://dotnet.microsoft.com/download).
+Requires [.NET 11 SDK (preview)](https://dotnet.microsoft.com/download).
 
 ```bash
 git clone https://github.com/do4k/gw2cli
 cd gw2cli
 dotnet run --project src/GW2CLI -- --help
 
-# Or publish a self-contained binary
+# Self-contained binary (no runtime needed)
 dotnet publish src/GW2CLI -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o out/
+
+# Framework-dependent binary (smaller, requires .NET 11 runtime)
+dotnet publish src/GW2CLI -c Release -r osx-arm64 --self-contained false -p:PublishSingleFile=true -o out/
 ```
 
 ## Setup
@@ -154,9 +167,31 @@ gw2 items get <item-id>    # Item detail: type, rarity, level, vendor value, TP 
 | Empyreal Fragment | 46735 |
 | Bloodstone Dust | 46731 |
 
-## Agent / AI Use
+## Agent / AI Use with Claude Code
 
-`SKILL.md` documents all commands with examples and common item IDs for use with an AI agent. Point an agent at it to answer questions like "how do I craft a legendary?" or "what dailies have I not done?".
+`SKILL.md` teaches Claude Code all gw2cli commands so you can ask questions like "how do I craft a legendary?" or "what dailies haven't I done?" in natural language.
+
+### Install Claude Code
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### Add the gw2cli skill
+
+```bash
+git clone https://github.com/do4k/gw2cli ~/.claude/skills/gw2cli
+```
+
+Claude Code auto-discovers skills from `~/.claude/skills/`. Once cloned, start a session and ask:
+
+- "What characters do I have and what level are they?"
+- "How do I craft Twilight?"
+- "What's the current price of Glob of Ectoplasm and is it worth selling?"
+- "Which of my dailies are incomplete?"
+- "What masteries am I missing for my account?"
+
+The skill reference (`SKILL.md`) lists all commands, common item IDs, and multi-step workflows. Pair with `gw2 auth set <key>` so Claude can query live account data.
 
 ## CI / Releases
 
