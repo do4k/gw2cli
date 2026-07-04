@@ -8,17 +8,17 @@ namespace GW2CLI.Commands;
 
 public static class CommerceCommands
 {
-    public static Command Build(ConfigService config, GW2ApiService api, Option<string?> apiKeyOption)
+    public static Command Build(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var commerce = new Command("commerce", "Trading post prices, listings, and currency exchange");
-        commerce.AddCommand(BuildPrice(api, apiKeyOption));
-        commerce.AddCommand(BuildListings(api, apiKeyOption));
-        commerce.AddCommand(BuildExchange(api, apiKeyOption));
-        commerce.AddCommand(BuildDelivery(api, apiKeyOption));
+        commerce.AddCommand(BuildPrice(api, keyContext, apiKeyOption));
+        commerce.AddCommand(BuildListings(api, keyContext, apiKeyOption));
+        commerce.AddCommand(BuildExchange(api, keyContext, apiKeyOption));
+        commerce.AddCommand(BuildDelivery(api, keyContext, apiKeyOption));
         return commerce;
     }
 
-    private static Command BuildPrice(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildPrice(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var itemIdArg = new Argument<int>("item-id", "Item ID");
         var cmd = new Command("price", "Show best buy/sell prices for an item");
@@ -26,7 +26,7 @@ public static class CommerceCommands
 
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var itemId = ctx.ParseResult.GetValueForArgument(itemIdArg);
 
             await Helpers.RunAsync(async () =>
@@ -44,42 +44,25 @@ public static class CommerceCommands
                 var name = item is not null
                     ? $"{Helpers.RarityMarkup(item.Rarity)} [bold]{Markup.Escape(item.Name)}[/]"
                     : $"Item [bold]#{itemId}[/]";
-
                 AnsiConsole.MarkupLine(name);
                 AnsiConsole.WriteLine();
 
                 var table = Helpers.NewTable("", "Unit Price", "Quantity");
-                table.AddRow(
-                    "[green]Highest Buy Order[/]",
-                    Helpers.FormatCoins(prices.Buys.UnitPrice),
-                    prices.Buys.Quantity.ToString("N0")
-                );
-                table.AddRow(
-                    "[red]Lowest Sell Listing[/]",
-                    Helpers.FormatCoins(prices.Sells.UnitPrice),
-                    prices.Sells.Quantity.ToString("N0")
-                );
+                table.AddRow("[green]Highest Buy Order[/]", Helpers.FormatCoins(prices.Buys.UnitPrice), prices.Buys.Quantity.ToString("N0"));
+                table.AddRow("[red]Lowest Sell Listing[/]", Helpers.FormatCoins(prices.Sells.UnitPrice), prices.Sells.Quantity.ToString("N0"));
+                AnsiConsole.Write(table);
 
                 var spread = prices.Sells.UnitPrice - prices.Buys.UnitPrice;
-                var spreadPct = prices.Buys.UnitPrice > 0
-                    ? (double)spread / prices.Sells.UnitPrice
-                    : 0;
-
-                AnsiConsole.Write(table);
-                AnsiConsole.WriteLine();
+                var spreadPct = prices.Buys.UnitPrice > 0 ? (double)spread / prices.Sells.UnitPrice : 0;
                 AnsiConsole.MarkupLine($"[grey]Spread:[/] {Helpers.FormatCoins(spread)} ({spreadPct:P1})");
-
                 if (prices.Sells.UnitPrice > 0)
-                {
-                    var afterTax = (int)(prices.Buys.UnitPrice * 0.85);
-                    AnsiConsole.MarkupLine($"[grey]Sell (after 15% tax):[/] {Helpers.FormatCoins(afterTax)}");
-                }
+                    AnsiConsole.MarkupLine($"[grey]Sell after 15% tax:[/] {Helpers.FormatCoins((int)(prices.Buys.UnitPrice * 0.85))}");
             });
         });
         return cmd;
     }
 
-    private static Command BuildListings(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildListings(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var itemIdArg = new Argument<int>("item-id", "Item ID");
         var limitOpt = new Option<int>("--limit", () => 10, "Number of top listings to show per side");
@@ -89,7 +72,7 @@ public static class CommerceCommands
 
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var itemId = ctx.ParseResult.GetValueForArgument(itemIdArg);
             var limit = ctx.ParseResult.GetValueForOption(limitOpt);
 
@@ -128,22 +111,21 @@ public static class CommerceCommands
         return cmd;
     }
 
-    private static Command BuildExchange(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildExchange(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var exchange = new Command("exchange", "Convert between coins and gems");
 
         var coinsCmd = new Command("coins", "Convert coins to gems");
-        var coinsArg = new Argument<long>("amount", "Number of copper coins (100 copper = 1 silver, 10000 = 1 gold)");
+        var coinsArg = new Argument<long>("amount", "Copper coins (10000 = 1 gold)");
         coinsCmd.AddArgument(coinsArg);
         coinsCmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var amount = ctx.ParseResult.GetValueForArgument(coinsArg);
             await Helpers.RunAsync(async () =>
             {
-                var rate = await AnsiConsole.Status()
-                    .Spinner(Spinner.Known.Dots)
-                    .StartAsync("Fetching exchange rate...", _ => api.GetCoinToGemRateAsync(amount));
+                var rate = await AnsiConsole.Status().Spinner(Spinner.Known.Dots)
+                    .StartAsync("Fetching rate...", _ => api.GetCoinToGemRateAsync(amount));
                 AnsiConsole.MarkupLine($"{Helpers.FormatCoins(amount)} → [mediumpurple1]{rate.Quantity} gems[/]");
                 AnsiConsole.MarkupLine($"[grey]Rate: {Helpers.FormatCoins(rate.CoinsPerGem)} per gem[/]");
             });
@@ -154,13 +136,12 @@ public static class CommerceCommands
         gemsCmd.AddArgument(gemsArg);
         gemsCmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var amount = ctx.ParseResult.GetValueForArgument(gemsArg);
             await Helpers.RunAsync(async () =>
             {
-                var rate = await AnsiConsole.Status()
-                    .Spinner(Spinner.Known.Dots)
-                    .StartAsync("Fetching exchange rate...", _ => api.GetGemToCoinRateAsync(amount));
+                var rate = await AnsiConsole.Status().Spinner(Spinner.Known.Dots)
+                    .StartAsync("Fetching rate...", _ => api.GetGemToCoinRateAsync(amount));
                 AnsiConsole.MarkupLine($"[mediumpurple1]{amount} gems[/] → {Helpers.FormatCoins(rate.Quantity)}");
                 AnsiConsole.MarkupLine($"[grey]Rate: {Helpers.FormatCoins(rate.CoinsPerGem)} per gem[/]");
             });
@@ -171,13 +152,12 @@ public static class CommerceCommands
         return exchange;
     }
 
-    private static Command BuildDelivery(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildDelivery(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var cmd = new Command("delivery", "Show pending trading post delivery box");
-
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             await Helpers.RunAsync(async () =>
             {
                 var (delivery, items) = await AnsiConsole.Status()
@@ -190,7 +170,6 @@ public static class CommerceCommands
                     });
 
                 AnsiConsole.MarkupLine("[bold]Trading Post Delivery[/]");
-
                 if (delivery.Coins > 0)
                     AnsiConsole.MarkupLine($"[grey]Coins:[/] {Helpers.FormatCoins(delivery.Coins)}");
 
@@ -207,20 +186,16 @@ public static class CommerceCommands
                     foreach (var entry in delivery.Items)
                     {
                         itemMap.TryGetValue(entry.Id, out var item);
-                        var name = item?.Name ?? $"Item #{entry.Id}";
-                        var rarity = item is not null ? Helpers.RarityMarkup(item.Rarity) : "";
-                        table.AddRow(Markup.Escape(name), entry.Count.ToString(), rarity);
+                        table.AddRow(
+                            Markup.Escape(item?.Name ?? $"Item #{entry.Id}"),
+                            entry.Count.ToString(),
+                            item is not null ? Helpers.RarityMarkup(item.Rarity) : ""
+                        );
                     }
                     AnsiConsole.Write(table);
                 }
             });
         });
         return cmd;
-    }
-
-    private static void ApplyOverride(InvocationContext ctx, GW2ApiService api, Option<string?> opt)
-    {
-        var key = ctx.ParseResult.GetValueForOption(opt);
-        if (key is not null) api.SetOverrideKey(key);
     }
 }

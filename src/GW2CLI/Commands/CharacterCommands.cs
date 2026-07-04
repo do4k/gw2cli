@@ -8,21 +8,20 @@ namespace GW2CLI.Commands;
 
 public static class CharacterCommands
 {
-    public static Command Build(ConfigService config, GW2ApiService api, Option<string?> apiKeyOption)
+    public static Command Build(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var characters = new Command("characters", "List and inspect characters");
-
         var nameArg = new Argument<string?>("name", () => null, "Character name (omit to list all)");
         characters.AddArgument(nameArg);
 
-        characters.AddCommand(BuildEquipment(api, apiKeyOption));
-        characters.AddCommand(BuildSkills(api, apiKeyOption));
-        characters.AddCommand(BuildCrafting(api, apiKeyOption));
-        characters.AddCommand(BuildInventory(api, apiKeyOption));
+        characters.AddCommand(BuildEquipment(api, keyContext, apiKeyOption));
+        characters.AddCommand(BuildSkills(api, keyContext, apiKeyOption));
+        characters.AddCommand(BuildCrafting(api, keyContext, apiKeyOption));
+        characters.AddCommand(BuildInventory(api, keyContext, apiKeyOption));
 
         characters.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var name = ctx.ParseResult.GetValueForArgument(nameArg);
 
             if (name is null)
@@ -32,10 +31,8 @@ public static class CharacterCommands
                     var names = await AnsiConsole.Status()
                         .Spinner(Spinner.Known.Dots)
                         .StartAsync("Fetching characters...", _ => api.GetCharacterNamesAsync());
-
                     var table = Helpers.NewTable("Character");
-                    foreach (var n in names)
-                        table.AddRow(Markup.Escape(n));
+                    foreach (var n in names) table.AddRow(Markup.Escape(n));
                     AnsiConsole.Write(table);
                 });
             }
@@ -57,8 +54,7 @@ public static class CharacterCommands
                 .StartAsync($"Fetching {name}...", _ => api.GetCharacterAsync(name));
 
             var grid = new Grid().AddColumn().AddColumn();
-            void Row(string label, string value)
-                => grid.AddRow($"[grey]{label}[/]", value);
+            void Row(string label, string value) => grid.AddRow($"[grey]{label}[/]", value);
 
             Row("Race", c.Race);
             Row("Gender", c.Gender);
@@ -86,7 +82,7 @@ public static class CharacterCommands
         });
     }
 
-    private static Command BuildEquipment(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildEquipment(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var nameArg = new Argument<string>("name", "Character name");
         var cmd = new Command("equipment", "Show equipped items for a character");
@@ -94,18 +90,17 @@ public static class CharacterCommands
 
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var name = ctx.ParseResult.GetValueForArgument(nameArg);
 
             await Helpers.RunAsync(async () =>
             {
                 var (character, items) = await AnsiConsole.Status()
                     .Spinner(Spinner.Known.Dots)
-                    .StartAsync($"Fetching equipment...", async _ =>
+                    .StartAsync("Fetching equipment...", async _ =>
                     {
                         var c = await api.GetCharacterAsync(name);
-                        var equipped = c.Equipment ?? [];
-                        var ids = equipped.Select(e => e.Id).Distinct();
+                        var ids = (c.Equipment ?? []).Select(e => e.Id).Distinct();
                         var i = await api.GetItemsAsync(ids);
                         return (c, i);
                     });
@@ -120,14 +115,11 @@ public static class CharacterCommands
                 foreach (var e in equipment)
                 {
                     itemMap.TryGetValue(e.Id, out var item);
-                    var itemName = item?.Name ?? $"Item #{e.Id}";
-                    var rarity = item is not null ? Helpers.RarityMarkup(item.Rarity) : "";
-                    var level = item?.Level.ToString() ?? "";
                     table.AddRow(
                         Markup.Escape(e.Slot),
-                        Markup.Escape(itemName),
-                        rarity,
-                        level
+                        Markup.Escape(item?.Name ?? $"Item #{e.Id}"),
+                        item is not null ? Helpers.RarityMarkup(item.Rarity) : "",
+                        item?.Level.ToString() ?? ""
                     );
                 }
 
@@ -138,7 +130,7 @@ public static class CharacterCommands
         return cmd;
     }
 
-    private static Command BuildSkills(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildSkills(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var nameArg = new Argument<string>("name", "Character name");
         var modeOpt = new Option<string>("--mode", () => "pve", "Game mode (pve/pvp/wvw)");
@@ -148,7 +140,7 @@ public static class CharacterCommands
 
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var name = ctx.ParseResult.GetValueForArgument(nameArg);
             var mode = ctx.ParseResult.GetValueForOption(modeOpt)?.ToLower() ?? "pve";
 
@@ -163,14 +155,12 @@ public static class CharacterCommands
                         {
                             "pvp" => c.Skills?.Pvp,
                             "wvw" => c.Skills?.Wvw,
-                            _ => c.Skills?.Pve
+                            _     => c.Skills?.Pve
                         };
-
                         var ids = new List<int>();
                         if (skillSet?.Heal.HasValue == true) ids.Add(skillSet.Heal.Value);
                         ids.AddRange(skillSet?.Utilities.Where(u => u.HasValue).Select(u => u!.Value) ?? []);
                         if (skillSet?.Elite.HasValue == true) ids.Add(skillSet.Elite.Value);
-
                         var s = await api.GetSkillsAsync(ids.Distinct());
                         return (c, s);
                     });
@@ -180,17 +170,15 @@ public static class CharacterCommands
                 {
                     "pvp" => character.Skills?.Pvp,
                     "wvw" => character.Skills?.Wvw,
-                    _ => character.Skills?.Pve
+                    _     => character.Skills?.Pve
                 };
 
                 AnsiConsole.MarkupLine($"[bold]{Markup.Escape(name)}[/] — [grey]{mode.ToUpper()} skills[/]");
-
                 var table = Helpers.NewTable("Slot", "Skill", "Description");
                 AddSkillRow(table, "Heal", skillSet?.Heal, skillMap);
                 for (int i = 0; i < (skillSet?.Utilities.Count ?? 0); i++)
                     AddSkillRow(table, $"Utility {i + 1}", skillSet!.Utilities[i], skillMap);
                 AddSkillRow(table, "Elite", skillSet?.Elite, skillMap);
-
                 AnsiConsole.Write(table);
             });
         });
@@ -201,13 +189,12 @@ public static class CharacterCommands
     {
         if (skillId is null || skillId == 0) return;
         skillMap.TryGetValue(skillId.Value, out var skill);
-        var name = skill?.Name ?? $"Skill #{skillId}";
         var desc = skill?.Description ?? "";
         if (desc.Length > 60) desc = desc[..57] + "...";
-        table.AddRow(Markup.Escape(slot), Markup.Escape(name), Markup.Escape(desc));
+        table.AddRow(Markup.Escape(slot), Markup.Escape(skill?.Name ?? $"#{skillId}"), Markup.Escape(desc));
     }
 
-    private static Command BuildCrafting(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildCrafting(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var nameArg = new Argument<string>("name", "Character name");
         var cmd = new Command("crafting", "Show crafting disciplines for a character");
@@ -215,7 +202,7 @@ public static class CharacterCommands
 
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var name = ctx.ParseResult.GetValueForArgument(nameArg);
 
             await Helpers.RunAsync(async () =>
@@ -233,13 +220,10 @@ public static class CharacterCommands
                 var table = Helpers.NewTable("Discipline", "Rating", "Max", "Active");
                 foreach (var d in character.Crafting.OrderByDescending(x => x.Rating))
                 {
-                    var max = CraftingMax(d.Discipline);
-                    var pct = max > 0 ? (double)d.Rating / max : 0;
-                    var bar = ProgressBar(pct, 15);
                     table.AddRow(
                         Markup.Escape(d.Discipline),
                         d.Rating.ToString(),
-                        max.ToString(),
+                        CraftingMax(d.Discipline).ToString(),
                         d.Active ? "[green]Yes[/]" : "[grey]No[/]"
                     );
                 }
@@ -249,7 +233,7 @@ public static class CharacterCommands
         return cmd;
     }
 
-    private static Command BuildInventory(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildInventory(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var nameArg = new Argument<string>("name", "Character name");
         var cmd = new Command("inventory", "Show character bag contents");
@@ -257,7 +241,7 @@ public static class CharacterCommands
 
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var name = ctx.ParseResult.GetValueForArgument(nameArg);
 
             await Helpers.RunAsync(async () =>
@@ -267,32 +251,30 @@ public static class CharacterCommands
                     .StartAsync("Fetching inventory...", async _ =>
                     {
                         var c = await api.GetCharacterAsync(name);
-                        var allSlots = (c.Bags ?? []).SelectMany(b => b.Inventory ?? [])
-                            .Where(s => s != null).Select(s => s!.Id).Distinct();
-                        var bagIds = (c.Bags ?? []).Select(b => b.Id).Distinct();
-                        var allIds = allSlots.Concat(bagIds).Distinct();
-                        var i = await api.GetItemsAsync(allIds);
+                        var slotIds = (c.Bags ?? []).SelectMany(b => b.Inventory ?? [])
+                            .Where(s => s != null).Select(s => s!.Id);
+                        var bagIds = (c.Bags ?? []).Select(b => b.Id);
+                        var i = await api.GetItemsAsync(slotIds.Concat(bagIds).Distinct());
                         return (c, i);
                     });
 
                 var itemMap = items.ToDictionary(i => i.Id);
                 var table = Helpers.NewTable("Bag", "Item", "Count", "Rarity");
 
-                int bagNum = 1;
                 foreach (var bag in character.Bags ?? [])
                 {
                     itemMap.TryGetValue(bag.Id, out var bagItem);
-                    var bagName = bagItem?.Name ?? $"Bag #{bag.Id}";
-                    table.AddRow($"[grey]── {Markup.Escape(bagName)} ({bag.Size} slots) ──[/]", "", "", "");
-
+                    table.AddRow($"[grey]── {Markup.Escape(bagItem?.Name ?? $"Bag #{bag.Id}")} ({bag.Size} slots) ──[/]", "", "", "");
                     foreach (var slot in bag.Inventory.Where(s => s != null))
                     {
                         itemMap.TryGetValue(slot!.Id, out var item);
-                        var itemName = item?.Name ?? $"Item #{slot.Id}";
-                        var rarity = item is not null ? Helpers.RarityMarkup(item.Rarity) : "";
-                        table.AddRow("", Markup.Escape(itemName), slot.Count.ToString(), rarity);
+                        table.AddRow(
+                            "",
+                            Markup.Escape(item?.Name ?? $"Item #{slot.Id}"),
+                            slot.Count.ToString(),
+                            item is not null ? Helpers.RarityMarkup(item.Rarity) : ""
+                        );
                     }
-                    bagNum++;
                 }
                 AnsiConsole.Write(table);
             });
@@ -300,48 +282,20 @@ public static class CharacterCommands
         return cmd;
     }
 
-    private static string ProgressBar(double pct, int width)
-    {
-        var filled = (int)(pct * width);
-        var bar = new string('█', filled) + new string('░', width - filled);
-        var color = pct >= 1.0 ? "green3" : pct >= 0.5 ? "yellow3" : "grey50";
-        return $"[{color}]{bar}[/]";
-    }
-
     private static int CraftingMax(string discipline) => discipline switch
     {
-        "Chef"           => 400,
-        "Jeweler"        => 400,
-        _                => 500
+        "Chef" or "Jeweler" => 400,
+        _ => 500
     };
 
     private static int SlotOrder(string slot) => slot switch
     {
-        "Helm"           => 0,
-        "Shoulders"      => 1,
-        "Coat"           => 2,
-        "Gloves"         => 3,
-        "Leggings"       => 4,
-        "Boots"          => 5,
-        "Backpack"       => 6,
-        "Accessory1"     => 7,
-        "Accessory2"     => 8,
-        "Amulet"         => 9,
-        "Ring1"          => 10,
-        "Ring2"          => 11,
-        "WeaponA1"       => 12,
-        "WeaponA2"       => 13,
-        "WeaponB1"       => 14,
-        "WeaponB2"       => 15,
-        "Sickle"         => 16,
-        "Axe"            => 17,
-        "Pick"           => 18,
-        _                => 99
+        "Helm" => 0, "Shoulders" => 1, "Coat" => 2, "Gloves" => 3,
+        "Leggings" => 4, "Boots" => 5, "Backpack" => 6,
+        "Accessory1" => 7, "Accessory2" => 8, "Amulet" => 9,
+        "Ring1" => 10, "Ring2" => 11,
+        "WeaponA1" => 12, "WeaponA2" => 13, "WeaponB1" => 14, "WeaponB2" => 15,
+        "Sickle" => 16, "Axe" => 17, "Pick" => 18,
+        _ => 99
     };
-
-    private static void ApplyOverride(InvocationContext ctx, GW2ApiService api, Option<string?> opt)
-    {
-        var key = ctx.ParseResult.GetValueForOption(opt);
-        if (key is not null) api.SetOverrideKey(key);
-    }
 }

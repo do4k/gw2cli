@@ -8,24 +8,24 @@ namespace GW2CLI.Commands;
 
 public static class AchievementCommands
 {
-    public static Command Build(ConfigService config, GW2ApiService api, Option<string?> apiKeyOption)
+    public static Command Build(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var achievements = new Command("achievements", "Browse and track achievements");
-        achievements.AddCommand(BuildDaily(api, apiKeyOption));
-        achievements.AddCommand(BuildGet(api, apiKeyOption));
-        achievements.AddCommand(BuildCategories(api, apiKeyOption));
+        achievements.AddCommand(BuildDaily(api, keyContext, apiKeyOption));
+        achievements.AddCommand(BuildGet(api, keyContext, apiKeyOption));
+        achievements.AddCommand(BuildCategories(api, keyContext, apiKeyOption));
         return achievements;
     }
 
-    private static Command BuildDaily(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildDaily(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
-        var cmd = new Command("daily", "Show today's daily achievements with completion status");
         var noAuthOpt = new Option<bool>("--no-auth", "Skip account progress (no API key needed)");
+        var cmd = new Command("daily", "Show today's daily achievements with completion status");
         cmd.AddOption(noAuthOpt);
 
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var noAuth = ctx.ParseResult.GetValueForOption(noAuthOpt);
 
             await Helpers.RunAsync(async () =>
@@ -40,10 +40,9 @@ public static class AchievementCommands
                         var a = await api.GetAchievementsAsync(allIds);
 
                         List<AccountAchievement>? progress = null;
-                        if (!noAuth && api.EffectiveKey is not null)
+                        if (!noAuth && keyContext.Override is not null)
                         {
-                            try { progress = await api.GetAccountAchievementsByIdAsync(allIds); }
-                            catch { }
+                            try { progress = await api.GetAccountAchievementsByIdAsync(allIds); } catch { }
                         }
                         return (d, a, progress);
                     });
@@ -72,40 +71,32 @@ public static class AchievementCommands
         Dictionary<int, AccountAchievement> progressMap)
     {
         if (entries.Count == 0) return;
-
         AnsiConsole.MarkupLine($"[bold cyan]{section}[/]");
-        var table = Helpers.NewTable("", "Achievement", "Requirement", "AP", "Status");
+        var table = Helpers.NewTable("", "Achievement", "Requirement", "AP");
         table.Columns[0].Width(3);
 
         foreach (var entry in entries)
         {
             achMap.TryGetValue(entry.Id, out var ach);
             progressMap.TryGetValue(entry.Id, out var prog);
-
-            var done = prog?.Done == true;
-            var status = prog is null ? "[grey]?[/]" : done ? "[green]✓[/]" : "[yellow]○[/]";
-            var icon = done ? "✓" : "○";
-            var name = ach?.Name ?? $"Achievement #{entry.Id}";
+            var status = prog is null ? "[grey]?[/]" : prog.Done ? "[green]✓[/]" : "[yellow]○[/]";
             var req = ach?.Requirement ?? "";
             if (req.Length > 50) req = req[..47] + "...";
-            var ap = ach?.Tiers.Sum(t => t.Points).ToString() ?? "";
             var levelRange = entry.Level.Min == 1 && entry.Level.Max == 80
-                ? ""
-                : $" [grey](L{entry.Level.Min}-{entry.Level.Max})[/]";
+                ? "" : $" [grey](L{entry.Level.Min}-{entry.Level.Max})[/]";
 
             table.AddRow(
                 status,
-                Markup.Escape(name) + levelRange,
+                Markup.Escape(ach?.Name ?? $"Achievement #{entry.Id}") + levelRange,
                 Markup.Escape(req),
-                ap,
-                ""
+                ach?.Tiers.Sum(t => t.Points).ToString() ?? ""
             );
         }
         AnsiConsole.Write(table);
         AnsiConsole.WriteLine();
     }
 
-    private static Command BuildGet(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildGet(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var idArg = new Argument<int>("id", "Achievement ID");
         var cmd = new Command("get", "Show details for a specific achievement");
@@ -113,7 +104,7 @@ public static class AchievementCommands
 
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             var id = ctx.ParseResult.GetValueForArgument(idArg);
 
             await Helpers.RunAsync(async () =>
@@ -124,10 +115,9 @@ public static class AchievementCommands
                     {
                         var a = await api.GetAchievementsAsync([id]);
                         AccountAchievement? p = null;
-                        if (api.EffectiveKey is not null)
+                        if (keyContext.Override is not null)
                         {
-                            try { p = (await api.GetAccountAchievementsByIdAsync([id])).FirstOrDefault(); }
-                            catch { }
+                            try { p = (await api.GetAccountAchievementsByIdAsync([id])).FirstOrDefault(); } catch { }
                         }
                         return (a, p);
                     });
@@ -140,8 +130,7 @@ public static class AchievementCommands
                 }
 
                 var content = new Grid().AddColumn().AddColumn();
-                void Row(string label, string value)
-                    => content.AddRow($"[grey]{label}[/]", value);
+                void Row(string label, string value) => content.AddRow($"[grey]{label}[/]", value);
 
                 Row("Type", ach.Type);
                 Row("Description", Markup.Escape(ach.Description));
@@ -149,25 +138,24 @@ public static class AchievementCommands
 
                 if (progress is not null)
                 {
-                    if (progress.Done)
-                        Row("Status", "[green]Completed[/]");
+                    if (progress.Done) Row("Status", "[green]Completed[/]");
                     else if (progress.Current.HasValue && progress.Max.HasValue)
                         Row("Progress", $"{progress.Current}/{progress.Max}");
-                    if (progress.Repeated.HasValue && progress.Repeated > 0)
-                        Row("Repeated", progress.Repeated.Value.ToString() + "x");
+                    if (progress.Repeated is > 0) Row("Repeated", $"{progress.Repeated}x");
                 }
 
-                var totalAp = ach.Tiers.Sum(t => t.Points);
-                Row("AP", totalAp.ToString());
+                Row("AP", ach.Tiers.Sum(t => t.Points).ToString());
 
                 if (ach.Rewards?.Count > 0)
                 {
-                    var rewards = string.Join(", ", ach.Rewards.Select(r =>
-                        r.Type == "Coins" ? Helpers.FormatCoins(r.Count ?? 0)
-                        : r.Type == "Item" ? $"Item #{r.Id} x{r.Count}"
-                        : r.Type == "Mastery" ? $"Mastery point ({r.Region})"
-                        : r.Type == "Title" ? $"Title #{r.Id}"
-                        : r.Type));
+                    var rewards = string.Join(", ", ach.Rewards.Select(r => r.Type switch
+                    {
+                        "Coins"   => Helpers.FormatCoins(r.Count ?? 0),
+                        "Item"    => $"Item #{r.Id} x{r.Count}",
+                        "Mastery" => $"Mastery point ({r.Region})",
+                        "Title"   => $"Title #{r.Id}",
+                        _         => r.Type
+                    }));
                     Row("Rewards", rewards);
                 }
 
@@ -190,13 +178,12 @@ public static class AchievementCommands
         return cmd;
     }
 
-    private static Command BuildCategories(GW2ApiService api, Option<string?> apiKeyOption)
+    private static Command BuildCategories(GW2ApiService api, ApiKeyContext keyContext, Option<string?> apiKeyOption)
     {
         var cmd = new Command("categories", "List all achievement categories");
-
         cmd.SetHandler(async (InvocationContext ctx) =>
         {
-            ApplyOverride(ctx, api, apiKeyOption);
+            Helpers.ApplyOverride(ctx, keyContext, apiKeyOption);
             await Helpers.RunAsync(async () =>
             {
                 var categories = await AnsiConsole.Status()
@@ -210,11 +197,5 @@ public static class AchievementCommands
             });
         });
         return cmd;
-    }
-
-    private static void ApplyOverride(InvocationContext ctx, GW2ApiService api, Option<string?> opt)
-    {
-        var key = ctx.ParseResult.GetValueForOption(opt);
-        if (key is not null) api.SetOverrideKey(key);
     }
 }

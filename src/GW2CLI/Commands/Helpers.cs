@@ -1,4 +1,8 @@
+using System.CommandLine;
+using System.CommandLine.Invocation;
+using System.Net;
 using GW2CLI.Services;
+using Refit;
 using Spectre.Console;
 
 namespace GW2CLI.Commands;
@@ -41,16 +45,16 @@ internal static class Helpers
 
     public static string ProfessionMarkup(string profession) => profession switch
     {
-        "Guardian"    => $"[royalblue1]{profession}[/]",
-        "Warrior"     => $"[yellow3]{profession}[/]",
-        "Engineer"    => $"[darkorange3]{profession}[/]",
-        "Ranger"      => $"[green3]{profession}[/]",
-        "Thief"       => $"[grey70]{profession}[/]",
-        "Elementalist"=> $"[red]{profession}[/]",
-        "Mesmer"      => $"[mediumpurple1]{profession}[/]",
-        "Necromancer" => $"[green]{profession}[/]",
-        "Revenant"    => $"[darkred]{profession}[/]",
-        _             => profession
+        "Guardian"     => $"[royalblue1]{profession}[/]",
+        "Warrior"      => $"[yellow3]{profession}[/]",
+        "Engineer"     => $"[darkorange3]{profession}[/]",
+        "Ranger"       => $"[green3]{profession}[/]",
+        "Thief"        => $"[grey70]{profession}[/]",
+        "Elementalist" => $"[red]{profession}[/]",
+        "Mesmer"       => $"[mediumpurple1]{profession}[/]",
+        "Necromancer"  => $"[green]{profession}[/]",
+        "Revenant"     => $"[darkred]{profession}[/]",
+        _              => profession
     };
 
     public static async Task RunAsync(Func<Task> action)
@@ -59,9 +63,28 @@ internal static class Helpers
         {
             await action();
         }
-        catch (GW2ApiException ex)
+        catch (ApiException ex)
         {
-            AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(ex.Message)}");
+            var msg = ex.StatusCode switch
+            {
+                HttpStatusCode.Unauthorized    => "Invalid or missing API key. Run 'gw2 auth set <key>' to configure.",
+                HttpStatusCode.Forbidden       => "API key lacks required permissions for this endpoint.",
+                HttpStatusCode.NotFound        => "Resource not found.",
+                HttpStatusCode.TooManyRequests => "Rate limit exceeded. Wait a moment and try again.",
+                HttpStatusCode.ServiceUnavailable => "GW2 API is temporarily unavailable.",
+                _ => $"API error {(int)ex.StatusCode}: {ex.Message}"
+            };
+            AnsiConsole.MarkupLine($"[red]Error:[/] {Markup.Escape(msg)}");
+            Environment.Exit(1);
+        }
+        catch (HttpRequestException ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Network error:[/] {Markup.Escape(ex.Message)}");
+            Environment.Exit(1);
+        }
+        catch (TaskCanceledException)
+        {
+            AnsiConsole.MarkupLine("[red]Error:[/] Request timed out.");
             Environment.Exit(1);
         }
         catch (Exception ex)
@@ -77,5 +100,10 @@ internal static class Helpers
         foreach (var col in columns)
             t.AddColumn(new TableColumn($"[bold]{Markup.Escape(col)}[/]"));
         return t;
+    }
+
+    public static void ApplyOverride(InvocationContext ctx, ApiKeyContext keyContext, Option<string?> opt)
+    {
+        keyContext.Override = ctx.ParseResult.GetValueForOption(opt);
     }
 }
